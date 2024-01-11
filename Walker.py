@@ -2,11 +2,11 @@ import random
 import math
 import numpy as np
 
-from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, LARGE_ANGLE_CUT_OFF, MOVEMENT_LENGTH_LIMITER, SINGLE_TURN_TURTUOUS, TURTUOUS_LENGTH_THRESHOLD
-from util import bound, distance_2d, rotate_vector
+from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MOVEMENT_LENGTH_LIMITER, TORTUOUS_MOVEMENT_LENGTH_LIMITER
+from util import bound, rotate_vector
 
 class Walker:
-    def __init__(self, grid, grid_size, turn_probability, initial_point = None):
+    def __init__(self, grid, grid_size, tortuousity_probability, initial_point = None):
         # Choose a random position on the SIZE x SIZE grid
         if initial_point is None:
             self.x = random.randint(0, grid_size - 1)
@@ -19,7 +19,7 @@ class Walker:
 
         self.grid_size = grid_size
         self.grid = grid
-        self.turn_probability = turn_probability
+        self.tortuousity_probability = tortuousity_probability
 
         # Choose a random direction vector
         norm = 0.0
@@ -31,27 +31,56 @@ class Walker:
 
         # Determine whether the walker has reached an edge
         self.dead = False
+
+        self.tortuous = False
+        self.tortuous_points = []
     
     def move(self):
         if self.dead:
             return False
 
         # Make a large turn based on the TURN_PROBABILITY
-        large_turn = random.random() < self.turn_probability
-        if large_turn:
-            turn_angle = np.random.choice(
-                list(range(ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND)) + 
-                list(range(-ANGLE_UPPER_BOUND, -ANGLE_LOWER_BOUND))
+        tortuous_turn = random.random() < self.tortuousity_probability
+
+        if tortuous_turn and not self.tortuous: # Only one tortuous turn per walker max
+            tortuous_points = [(self.x, self.y)]
+            self.make_move(
+                self.get_random_large_angle(),
+                self.get_random_small_movement_length()
             )
+            tortuous_points.append((self.x, self.y))
+
+            if self.dead:
+                return True
+            
+            self.make_move(
+                self.get_random_large_angle(),
+                self.get_random_small_movement_length()
+            )
+            tortuous_points.append((self.x, self.y))
+
+            if self.dead:
+                return True
+            
+            self.make_move(
+                self.get_random_large_angle(),
+                self.get_random_small_movement_length()
+            )
+            tortuous_points.append((self.x, self.y))
+
+            self.tortuous = True
+            self.tortuous_points += tortuous_points
         else:
-            turn_angle = np.random.choice(
-                list(range(-ANGLE_LOWER_BOUND, ANGLE_LOWER_BOUND))
+            self.make_move(
+                self.get_random_small_angle(),
+                self.get_random_movement_length()
             )
-        
+        return True
+    
+    def make_move(self, turn_angle, movement_length):
         # Rotate the direction vector by TURN_ANGLE degrees
         self.direction = rotate_vector(self.direction, turn_angle)
 
-        movement_length = random.randint(1, math.floor((self.grid_size - 1) * MOVEMENT_LENGTH_LIMITER))
         final_pos_x = bound(self.grid_size, self.x + self.direction[0] * movement_length)
         final_pos_y = bound(self.grid_size, self.y + self.direction[1] * movement_length)
 
@@ -77,51 +106,24 @@ class Walker:
         
         self.points.append((self.x, self.y))
         self.turn_angles.append(turn_angle)
-        return True
-        
-    def find_tortuousity(self):
-        turtuous_points = []
-        for i in range(len(self.points) - 2):
-            is_tortuous, points = self.is_tortuous(i)
-            if(is_tortuous):
-                if turtuous_points == []:
-                    turtuous_points.append(set(points))
-                else:
-                    if self.points[i] in turtuous_points[-1]:
-                        turtuous_points[-1].update(points)
-                    else:
-                        turtuous_points.append(set(points))
-        return turtuous_points
 
+    def get_random_movement_length(self):
+        dist = 0
+        while dist == 0:
+            dist = random.randint(1, math.floor((self.grid_size - 1) * MOVEMENT_LENGTH_LIMITER))
+        return dist
+
+    def get_random_small_movement_length(self):
+        dist = 0
+        while dist == 0:
+            dist = math.floor(self.get_random_movement_length() * TORTUOUS_MOVEMENT_LENGTH_LIMITER)
+        return dist
     
-    def is_tortuous(self, i):
-        # Check in triples of points
-        # See if the distance between the points is less than 5% of the grid size
-        # See if large turns happened in both the points
-        # If both the above conditions are satisfied, then the walker is tortuous
-        p1 = self.points[i]
-        p2 = self.points[i + 1]
-        p3 = self.points[i + 2]
-
-        turn_1_2 = self.turn_angles[i]
-        turn_2_3 = self.turn_angles[i + 1]
-
-        # If obtuse turns happen, it is turtuous
-        if abs(turn_1_2) >= LARGE_ANGLE_CUT_OFF:
-            return True & SINGLE_TURN_TURTUOUS, [p1]
-        if abs(turn_2_3) >= LARGE_ANGLE_CUT_OFF:
-            return True & SINGLE_TURN_TURTUOUS, [p2]
-
-        if distance_2d(p1, p2) >= self.grid_size * TURTUOUS_LENGTH_THRESHOLD:
-            return False, None
-
-        if distance_2d(p2, p3) >= self.grid_size * TURTUOUS_LENGTH_THRESHOLD:
-            return False, None
-        
-        if abs(turn_1_2) <= ANGLE_LOWER_BOUND:
-            return False, None
-        
-        if abs(turn_2_3) <= ANGLE_LOWER_BOUND:
-            return False, None
-        
-        return True, [p1, p2, p3]   
+    def get_random_small_angle(self):
+        return random.randint(-ANGLE_LOWER_BOUND, ANGLE_LOWER_BOUND)
+    
+    def get_random_large_angle(self):
+        return np.random.choice(
+            list(range(ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND)) + 
+            list(range(-ANGLE_UPPER_BOUND, -ANGLE_LOWER_BOUND))
+        )

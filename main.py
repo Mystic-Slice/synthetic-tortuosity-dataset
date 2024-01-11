@@ -3,10 +3,12 @@ import numpy as np
 import math
 import pandas as pd
 import os
+import time
+import tqdm
 
 from Walker import Walker
 from util import generate_centered_point, bound
-from config import GRID_SIZE, NUM_WALKERS, LARGE_TURN_PROBABILITY
+from config import GRID_SIZE, NUM_WALKERS, TORTUOUSITY_PROBABILITY
 
 def generate_image(draw_bounding_box=False):
     img = [[[0, 0, 0] for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
@@ -15,7 +17,7 @@ def generate_image(draw_bounding_box=False):
     INITIAL_POINT = generate_centered_point(GRID_SIZE)
 
     walkers = [
-            Walker(img, GRID_SIZE, LARGE_TURN_PROBABILITY, INITIAL_POINT) 
+            Walker(img, GRID_SIZE, TORTUOUSITY_PROBABILITY, INITIAL_POINT) 
             for _ in range(NUM_WALKERS)
         ]
 
@@ -29,8 +31,11 @@ def generate_image(draw_bounding_box=False):
             break
 
     tortuous_points = []
+    tortuous = False
     for w in walkers:
-        tortuous_points += w.find_tortuousity()
+        tortuous |= w.tortuous
+        if w.tortuous:
+            tortuous_points.append(w.tortuous_points)
 
     if draw_bounding_box:
         # Mark the tortuous points red
@@ -57,42 +62,43 @@ def generate_image(draw_bounding_box=False):
     img = np.array(img, dtype=np.uint8)
     img = Image.fromarray(img)
 
-    is_tortuous = len(tortuous_points) > 0
-    return img, is_tortuous
+    return img, tortuous
 
-# from PIL import ImageDraw
-# draw = ImageDraw.Draw(img)
-# draw.text((0, 0), f"Tortuosity: {len(tortuous_points) > 0}")
-img, is_tortuous = generate_image(True)
-img.save("random_walk.png")
-print(f"Tortuosity: {is_tortuous}")
+os.makedirs("images/tortuous", exist_ok=True)
+os.makedirs("images/non_tortuous", exist_ok=True)
 
-# os.makedirs("images/tortuous", exist_ok=True)
-# os.makedirs("images/non_tortuous", exist_ok=True)
+start = time.time()
+NUM_IMAGES_PER_CLASS = 100
+num_images = 0
+num_tortuous = 0
+num_non_tortuous = 0
+files = {}
 
-# NUM_IMAGES = 10
-# num_images = 0
-# num_tortuous = 0
-# num_non_tortuous = 0
-# files = {}
-# while num_images < NUM_IMAGES * 2:
-#     img, is_tortuous = generate_image()
-#     if is_tortuous:
-#         if num_tortuous >= NUM_IMAGES:
-#             continue
-#         filename = f"images/tortuous/{num_tortuous}.png"
-#         files[num_images] = {"filename": filename, "tortuous": 1}
-#         img.save(filename)
-#         num_tortuous += 1
-#         num_images += 1
-#     else:
-#         if num_non_tortuous >= NUM_IMAGES:
-#             continue
-#         filename = f"images/non_tortuous/{num_non_tortuous}.png"
-#         files[num_images] = {"filename": filename, "tortuous": 0}
-#         img.save(filename)
-#         num_non_tortuous += 1
-#         num_images += 1
+tqdm_meter = tqdm.tqdm(total=NUM_IMAGES_PER_CLASS * 2)
+while num_images < NUM_IMAGES_PER_CLASS * 2:
+    img, is_tortuous = generate_image()
+    if is_tortuous:
+        if num_tortuous >= NUM_IMAGES_PER_CLASS:
+            continue
+        filename = f"images/tortuous/{num_tortuous}.png"
+        files[num_images] = {"filename": filename, "tortuous": 1}
+        img.save(filename)
+        num_tortuous += 1
+        num_images += 1
+        tqdm_meter.update(1)
+    else:
+        if num_non_tortuous >= NUM_IMAGES_PER_CLASS:
+            continue
+        filename = f"images/non_tortuous/{num_non_tortuous}.png"
+        files[num_images] = {"filename": filename, "tortuous": 0}
+        img.save(filename)
+        num_non_tortuous += 1
+        num_images += 1
+        tqdm_meter.update(1)
+tqdm_meter.close()
 
-# df = pd.DataFrame.from_dict(files, orient="index")
-# df.to_csv("images/data.csv", index=False)
+df = pd.DataFrame.from_dict(files, orient="index")
+df.to_csv("images/data.csv", index=False)
+
+end = time.time()
+print(f"Time taken: {end - start} seconds to generate {NUM_IMAGES_PER_CLASS * 2} images")
