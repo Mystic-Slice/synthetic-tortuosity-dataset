@@ -2,11 +2,21 @@ import random
 import math
 import numpy as np
 
-from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MOVEMENT_LENGTH_LIMITER, TORTUOUS_MOVEMENT_LENGTH_LIMITER, TORTUOUSITY_AFTER_STEPS, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS
+from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MOVEMENT_LENGTH_LIMITER, TORTUOUS_MOVEMENT_LENGTH_LIMITER, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS
 from util import bound, rotate_vector
 
 class Walker:
-    def __init__(self, grid, grid_size, tortuousity_probability, reproduction_probability, death_probability, initial_point = None, initial_direction = None):
+    def __init__(
+            self, 
+            grid,
+            grid_size, 
+            tortuous, 
+            tortuousity_probability, 
+            reproduction_probability, 
+            death_probability, 
+            initial_point = None, 
+            initial_direction = None
+        ):
         # Choose a random position on the SIZE x SIZE grid
         if initial_point is None:
             self.x = random.randint(0, grid_size - 1)
@@ -37,7 +47,7 @@ class Walker:
         # Determine whether the walker has reached an edge
         self.dead = False
 
-        self.tortuous = False
+        self.tortuous = tortuous
         self.tortuous_points = []
 
         self.children = []
@@ -51,36 +61,10 @@ class Walker:
 
         # Make a large turn based on the TURN_PROBABILITY
         tortuous_turn = random.random() <= self.tortuousity_probability and \
-                        len(self.points) >= TORTUOUSITY_AFTER_STEPS
+                        self.tortuous
 
-        if tortuous_turn and not self.tortuous: # Only one tortuous turn per walker max
-            tortuous_points = [(self.x, self.y)]
-            self.make_move(
-                self.get_random_large_angle(),
-                self.get_random_small_movement_length()
-            )
-            tortuous_points.append((self.x, self.y))
-
-            if self.dead:
-                return True
-            
-            self.make_move(
-                self.get_random_large_angle(),
-                self.get_random_small_movement_length()
-            )
-            tortuous_points.append((self.x, self.y))
-
-            if self.dead:
-                return True
-            
-            self.make_move(
-                self.get_random_large_angle(),
-                self.get_random_small_movement_length()
-            )
-            tortuous_points.append((self.x, self.y))
-
-            self.tortuous = True
-            self.tortuous_points += tortuous_points
+        if tortuous_turn:
+            self.make_tortuous_move()
         else:
             self.make_move(
                 self.get_random_small_angle(),
@@ -110,6 +94,7 @@ class Walker:
                 Walker(
                     self.grid, 
                     self.grid_size, 
+                    self.tortuous,
                     self.tortuousity_probability, 
                     self.reproduction_probability * WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, # Child is twice as likely to die
                     min(self.death_probability * WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, 1.0), # Child is twice as likely to die
@@ -141,6 +126,46 @@ class Walker:
         self.points.append((self.x, self.y))
         self.turn_angles.append(turn_angle)
         self.check_bounds_and_die()
+
+    def make_tortuous_move(self):
+        final_turn_angle = self.get_random_small_angle() # After the tortuous turn, come back to this angle
+
+        total_angle_turned = 0
+        tortuous_points = [(self.x, self.y)]
+
+        turn_angle = self.get_random_large_angle()
+        self.make_move(
+            turn_angle, 
+            self.get_random_small_movement_length()
+        )
+        total_angle_turned += turn_angle
+        tortuous_points.append((self.x, self.y))
+        if self.dead:
+            return
+        
+        turn_angle = self.get_random_large_angle()
+        self.make_move(
+            turn_angle, 
+            self.get_random_small_movement_length()
+        )
+        total_angle_turned += turn_angle
+        tortuous_points.append((self.x, self.y))
+        if self.dead:
+            return
+        
+        # Make a corrective turn to get back to the original angle
+        self.make_move(
+            final_turn_angle - total_angle_turned, 
+            self.get_random_small_movement_length()
+        )
+        tortuous_points.append((self.x, self.y))
+        if self.dead:
+            return
+        
+        self.tortuous_points.append(tortuous_points)
+
+    def get_tortuous_points(self):
+        return self.tortuous_points + sum([child.get_tortuous_points() for child in self.children], [])
 
     def get_random_movement_length(self):
         dist = 0

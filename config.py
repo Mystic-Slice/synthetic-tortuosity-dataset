@@ -2,17 +2,17 @@
 GRID_SIZE = 1000
 
 # Tortuosity configuration
-TORTUOUSITY_PROBABILITY = 0.01
-TORTUOUSITY_AFTER_STEPS = 5 # Tortuousity is only allowed after this many steps, otherwise gets hidden in the dense central region
+TORTUOUSITY_PROBABILITY = 0.1
 ANGLE_LOWER_BOUND = 15
-ANGLE_UPPER_BOUND = 135
+ANGLE_UPPER_BOUND = 90
 TORTUOUS_MOVEMENT_LENGTH_LIMITER = 0.3 # applied over the MOVEMENT_LENGTH_LIMITER to get small jagged movements
 
 # Walker configuration
-NUM_WALKERS = 20
+MOVEMENT_LENGTH_LIMITER = 0.05 # percentage of grid size per step maximum allowed
+NUM_WALKERS = 15
 WALKER_MATURITY_STEPS = 5
-WALKER_INITIAL_REPRODUCTION_PROBABILITY = 0.4
+TORTUOUS_WALKERS = 0.7 # percentage of walkers that are tortuous
+WALKER_INITIAL_REPRODUCTION_PROBABILITY = 0.3
 WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER = 0.1
 WALKER_INITIAL_DEATH_PROBABILITY = 0.05
 WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER = 2
-MOVEMENT_LENGTH_LIMITER = 0.05 # percentage of grid size per step maximum allowed

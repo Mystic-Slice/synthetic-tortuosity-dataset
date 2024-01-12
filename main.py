@@ -2,15 +2,19 @@ from PIL import Image
 import numpy as np
 import math
 import pandas as pd
+import random
 import os
 import time
 import tqdm
 
 from Walker import Walker
 from util import generate_centered_point, bound, rotate_vector
-from config import GRID_SIZE, NUM_WALKERS, TORTUOUSITY_PROBABILITY, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY
+from config import GRID_SIZE, NUM_WALKERS, TORTUOUS_WALKERS, TORTUOUSITY_PROBABILITY, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY
 
 def generate_image(draw_bounding_box=False):
+
+    tortuous_image = random.random() < 0.5 # 50% chance of generating a tortuous image
+
     img = [[[0, 0, 0] for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
 
     # Spawn walkers somewhere in the middle of the image
@@ -20,6 +24,7 @@ def generate_image(draw_bounding_box=False):
             Walker(
                 img, 
                 GRID_SIZE, 
+                (random.random() <= TORTUOUS_WALKERS) and tortuous_image, # if tortuous image, 50% of all walkers follow tortuous path
                 TORTUOUSITY_PROBABILITY, 
                 WALKER_INITIAL_REPRODUCTION_PROBABILITY,
                 WALKER_INITIAL_DEATH_PROBABILITY,
@@ -43,7 +48,7 @@ def generate_image(draw_bounding_box=False):
     for w in walkers:
         tortuous |= w.tortuous
         if w.tortuous:
-            tortuous_points.append(w.tortuous_points)
+            tortuous_points += w.get_tortuous_points()
 
     if draw_bounding_box:
         # Mark the tortuous points red
@@ -72,10 +77,6 @@ def generate_image(draw_bounding_box=False):
 
     return img, tortuous
 
-# img, is_tortuous = generate_image(draw_bounding_box=True)
-# img.save("sample.png")
-# print(f"Tortuosity: {is_tortuous}")
-
 os.makedirs("images/tortuous", exist_ok=True)
 os.makedirs("images/non_tortuous", exist_ok=True)
 
@@ -88,7 +89,7 @@ files = {}
 
 tqdm_meter = tqdm.tqdm(total=NUM_IMAGES_PER_CLASS * 2)
 while num_images < NUM_IMAGES_PER_CLASS * 2:
-    img, is_tortuous = generate_image(True)
+    img, is_tortuous = generate_image()
     if is_tortuous:
         if num_tortuous >= NUM_IMAGES_PER_CLASS:
             continue
