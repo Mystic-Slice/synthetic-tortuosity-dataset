@@ -40,6 +40,7 @@ The grid size (image size), the number of `Walker`s, the tortuousity probability
 ## How to use:
 Code in `main.py` helps generate a dataset of images. The images are stored in a folder along with a csv file with filenames and tortuousity labels.
 
+
 ### To generate sample image:
 ```py
 img, is_tortuous = generate_image(draw_bounding_box=True)
