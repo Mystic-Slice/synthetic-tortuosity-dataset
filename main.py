@@ -7,8 +7,8 @@ import time
 import tqdm
 
 from Walker import Walker
-from util import generate_centered_point, bound
-from config import GRID_SIZE, NUM_WALKERS, TORTUOUSITY_PROBABILITY
+from util import generate_centered_point, bound, rotate_vector
+from config import GRID_SIZE, NUM_WALKERS, TORTUOUSITY_PROBABILITY, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY
 
 def generate_image(draw_bounding_box=False):
     img = [[[0, 0, 0] for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
@@ -17,8 +17,16 @@ def generate_image(draw_bounding_box=False):
     INITIAL_POINT = generate_centered_point(GRID_SIZE)
 
     walkers = [
-            Walker(img, GRID_SIZE, TORTUOUSITY_PROBABILITY, INITIAL_POINT) 
-            for _ in range(NUM_WALKERS)
+            Walker(
+                img, 
+                GRID_SIZE, 
+                TORTUOUSITY_PROBABILITY, 
+                WALKER_INITIAL_REPRODUCTION_PROBABILITY,
+                WALKER_INITIAL_DEATH_PROBABILITY,
+                INITIAL_POINT,
+                rotate_vector((1, 0), (i * 360) / NUM_WALKERS) # Spread the walkers out evenly
+            ) 
+            for i in range(NUM_WALKERS)
         ]
 
     while True:
@@ -64,6 +72,10 @@ def generate_image(draw_bounding_box=False):
 
     return img, tortuous
 
+# img, is_tortuous = generate_image(draw_bounding_box=True)
+# img.save("sample.png")
+# print(f"Tortuosity: {is_tortuous}")
+
 os.makedirs("images/tortuous", exist_ok=True)
 os.makedirs("images/non_tortuous", exist_ok=True)
 
@@ -76,7 +88,7 @@ files = {}
 
 tqdm_meter = tqdm.tqdm(total=NUM_IMAGES_PER_CLASS * 2)
 while num_images < NUM_IMAGES_PER_CLASS * 2:
-    img, is_tortuous = generate_image()
+    img, is_tortuous = generate_image(True)
     if is_tortuous:
         if num_tortuous >= NUM_IMAGES_PER_CLASS:
             continue

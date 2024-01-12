@@ -2,11 +2,11 @@ import random
 import math
 import numpy as np
 
-from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MOVEMENT_LENGTH_LIMITER, TORTUOUS_MOVEMENT_LENGTH_LIMITER
+from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MOVEMENT_LENGTH_LIMITER, TORTUOUS_MOVEMENT_LENGTH_LIMITER, TORTUOUSITY_AFTER_STEPS, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS
 from util import bound, rotate_vector
 
 class Walker:
-    def __init__(self, grid, grid_size, tortuousity_probability, initial_point = None):
+    def __init__(self, grid, grid_size, tortuousity_probability, reproduction_probability, death_probability, initial_point = None, initial_direction = None):
         # Choose a random position on the SIZE x SIZE grid
         if initial_point is None:
             self.x = random.randint(0, grid_size - 1)
@@ -20,27 +20,38 @@ class Walker:
         self.grid_size = grid_size
         self.grid = grid
         self.tortuousity_probability = tortuousity_probability
+        self.reproduction_probability = reproduction_probability
+        self.death_probability = death_probability
 
-        # Choose a random direction vector
-        norm = 0.0
-        while norm == 0.0:
-            dir_x = random.randint(-1, 1)
-            dir_y = random.randint(-1, 1)
-            norm = np.sqrt(dir_x ** 2 + dir_y ** 2)
-        self.direction = (dir_x/norm , dir_y/norm)
+        if initial_direction is not None:
+            self.direction = initial_direction
+        else:
+            # Choose a random direction vector
+            norm = 0.0
+            while norm == 0.0:
+                dir_x = random.randint(-1, 1)
+                dir_y = random.randint(-1, 1)
+                norm = np.sqrt(dir_x ** 2 + dir_y ** 2)
+            self.direction = (dir_x/norm , dir_y/norm)
 
         # Determine whether the walker has reached an edge
         self.dead = False
 
         self.tortuous = False
         self.tortuous_points = []
+
+        self.children = []
     
     def move(self):
+        for child in self.children:
+            child.move()
+
         if self.dead:
             return False
 
         # Make a large turn based on the TURN_PROBABILITY
-        tortuous_turn = random.random() < self.tortuousity_probability
+        tortuous_turn = random.random() <= self.tortuousity_probability and \
+                        len(self.points) >= TORTUOUSITY_AFTER_STEPS
 
         if tortuous_turn and not self.tortuous: # Only one tortuous turn per walker max
             tortuous_points = [(self.x, self.y)]
@@ -75,7 +86,37 @@ class Walker:
                 self.get_random_small_angle(),
                 self.get_random_movement_length()
             )
+
+        self.try_reproduce()
+        self.try_die()
         return True
+    
+    def try_die(self):
+        if random.random() <= self.death_probability:
+            self.dead = True
+
+    def check_bounds_and_die(self):
+        if self.x >= self.grid_size - 1 or \
+            self.y >= self.grid_size - 1 or \
+            self.x <= 0 or \
+            self.y <= 0:
+            self.dead = True
+    
+    def try_reproduce(self):
+        if len(self.points) < WALKER_MATURITY_STEPS:
+            return
+        if random.random() <= self.reproduction_probability:
+            self.children.append(
+                Walker(
+                    self.grid, 
+                    self.grid_size, 
+                    self.tortuousity_probability, 
+                    self.reproduction_probability * WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, # Child is twice as likely to die
+                    min(self.death_probability * WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, 1.0), # Child is twice as likely to die
+                    (self.x, self.y),
+                    rotate_vector(self.direction, self.get_random_small_angle())
+                )
+            )
     
     def make_move(self, turn_angle, movement_length):
         # Rotate the direction vector by TURN_ANGLE degrees
@@ -83,13 +124,6 @@ class Walker:
 
         final_pos_x = bound(self.grid_size, self.x + self.direction[0] * movement_length)
         final_pos_y = bound(self.grid_size, self.y + self.direction[1] * movement_length)
-
-        # If the walker has reached an edge, it dies
-        if final_pos_x == self.grid_size - 1 or \
-            final_pos_y == self.grid_size - 1 or \
-            final_pos_x == 0 or \
-            final_pos_y == 0:
-            self.dead = True
 
         # Move to that position and make all the points along the way 1
         stride_x = final_pos_x - self.x
@@ -106,6 +140,7 @@ class Walker:
         
         self.points.append((self.x, self.y))
         self.turn_angles.append(turn_angle)
+        self.check_bounds_and_die()
 
     def get_random_movement_length(self):
         dist = 0
