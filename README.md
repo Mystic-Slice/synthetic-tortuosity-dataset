@@ -43,7 +43,6 @@ Code in `main.py` helps generate a dataset of images. The images are stored in a
 
 ### To generate sample image:
 ```py
-img, is_tortuous = generate_image(draw_bounding_box=True)
-img.save("sample.png")
-print(f"Tortuosity: {is_tortuous}")
+img = generate_image(tortuous_image=True)
+img.save("tortuous.png")
 ```
