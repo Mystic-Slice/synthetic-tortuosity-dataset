@@ -2,8 +2,8 @@ import random
 import math
 import numpy as np
 
-from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MOVEMENT_LENGTH_LIMITER, TORTUOUS_MOVEMENT_LENGTH_LIMITER, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS
-from util import bound, rotate_vector
+from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MOVEMENT_LENGTH_LIMITER, TORTUOUS_MOVEMENT_LENGTH_LIMITER, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS, WALKER_INITIAL_PATH_WIDTH, WALKER_PATH_WIDTH_DECAY
+from util import bound, damped_sine, rotate_vector
 
 class Walker:
     def __init__(
@@ -11,11 +11,12 @@ class Walker:
             grid,
             grid_size, 
             tortuous, 
-            tortuousity_probability, 
             reproduction_probability, 
             death_probability, 
             initial_point = None, 
-            initial_direction = None
+            initial_direction = None,
+            width = None,
+            moves = 0
         ):
         # Choose a random position on the SIZE x SIZE grid
         if initial_point is None:
@@ -24,12 +25,8 @@ class Walker:
         else:
             self.x, self.y = initial_point
 
-        self.points = [(self.x, self.y)]
-        self.turn_angles = []
-
         self.grid_size = grid_size
         self.grid = grid
-        self.tortuousity_probability = tortuousity_probability
         self.reproduction_probability = reproduction_probability
         self.death_probability = death_probability
 
@@ -44,13 +41,19 @@ class Walker:
                 norm = np.sqrt(dir_x ** 2 + dir_y ** 2)
             self.direction = (dir_x/norm , dir_y/norm)
 
+        if width is None:
+            self.width = self.grid_size * WALKER_INITIAL_PATH_WIDTH
+        else:
+            self.width = width
+
         # Determine whether the walker has reached an edge
         self.dead = False
 
         self.tortuous = tortuous
-        self.tortuous_points = []
 
         self.children = []
+
+        self.moves = moves
     
     def move(self):
         for child in self.children:
@@ -58,25 +61,25 @@ class Walker:
 
         if self.dead:
             return False
+        
+        self.moves += 1 
 
-        # Make a large turn based on the TURN_PROBABILITY
-        tortuous_turn = random.random() <= self.tortuousity_probability and \
-                        self.tortuous
-
-        if tortuous_turn:
+        if self.tortuous:
             self.make_tortuous_move()
         else:
-            self.make_move(
-                self.get_random_small_angle(),
-                self.get_random_movement_length()
-            )
+            self.make_normal_move()
 
         self.try_reproduce()
-        self.try_die()
+        self.try_die_old_age()
         return True
     
-    def try_die(self):
-        if random.random() <= self.death_probability:
+    def try_die_old_age(self):
+        # if random.random() <= self.death_probability:
+            # self.dead = True
+
+        # Death probability dependent on age (number of moves)
+        death_prob = np.power(2, self.moves) * self.death_probability / 500
+        if random.random() <= death_prob:
             self.dead = True
 
     def check_bounds_and_die(self):
@@ -87,7 +90,7 @@ class Walker:
             self.dead = True
     
     def try_reproduce(self):
-        if len(self.points) < WALKER_MATURITY_STEPS:
+        if self.moves < WALKER_MATURITY_STEPS:
             return
         if random.random() <= self.reproduction_probability:
             self.children.append(
@@ -95,15 +98,24 @@ class Walker:
                     self.grid, 
                     self.grid_size, 
                     self.tortuous,
-                    self.tortuousity_probability, 
-                    self.reproduction_probability * WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, # Child is twice as likely to die
-                    min(self.death_probability * WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, 1.0), # Child is twice as likely to die
+                    self.reproduction_probability * WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER,
+                    min(self.death_probability * WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, 1.0),
                     (self.x, self.y),
-                    rotate_vector(self.direction, self.get_random_small_angle())
+                    rotate_vector(self.direction, self.get_random_large_angle()),
+                    self.width,
+                    self.moves
                 )
             )
     
-    def make_move(self, turn_angle, movement_length):
+    def make_normal_move(self):
+        self.make_small_move_straight()
+        self.make_small_move_straight()
+        self.make_small_move_straight()
+
+    def make_small_move_straight(self):
+        turn_angle = self.get_random_small_angle()
+        movement_length = self.get_random_small_movement_length()
+
         # Rotate the direction vector by TURN_ANGLE degrees
         self.direction = rotate_vector(self.direction, turn_angle)
 
@@ -121,51 +133,37 @@ class Walker:
         for _ in range(NUM_STEPS):
             self.x += step_x
             self.y += step_y
-            self.grid[math.floor(self.x)][math.floor(self.y)] = [255, 255, 255]
+            self.paint_perpendicular((self.x, self.y), self.width)
+            self.width_decay()
         
-        self.points.append((self.x, self.y))
-        self.turn_angles.append(turn_angle)
         self.check_bounds_and_die()
 
+    def width_decay(self, decay=WALKER_PATH_WIDTH_DECAY):
+        self.width *= (1 - decay)
+
     def make_tortuous_move(self):
-        final_turn_angle = self.get_random_small_angle() # After the tortuous turn, come back to this angle
+        turn_angle = self.get_random_small_angle()
+        self.direction = rotate_vector(self.direction, turn_angle)
 
-        total_angle_turned = 0
-        tortuous_points = [(self.x, self.y)]
+        amplitude = self.get_random_movement_length()
+        wavelength = self.get_random_movement_length() * 2
+        self.make_sine_move(amplitude, wavelength)
+        
+    def make_sine_move(self, amplitude, wavelength):
+        initial_x, initial_y = self.x, self.y
+        total_angle = 360
+        step_length = (wavelength / 2.0) / total_angle
+        penpendicular_direction = rotate_vector(self.direction, 90)
+        for angle in range(1, total_angle + 1):
+            base_x = initial_x + self.direction[0] * angle * step_length
+            base_y = initial_y + self.direction[1] * angle * step_length
 
-        turn_angle = self.get_random_large_angle()
-        self.make_move(
-            turn_angle, 
-            self.get_random_small_movement_length()
-        )
-        total_angle_turned += turn_angle
-        tortuous_points.append((self.x, self.y))
-        if self.dead:
-            return
-        
-        turn_angle = self.get_random_large_angle()
-        self.make_move(
-            turn_angle, 
-            self.get_random_small_movement_length()
-        )
-        total_angle_turned += turn_angle
-        tortuous_points.append((self.x, self.y))
-        if self.dead:
-            return
-        
-        # Make a corrective turn to get back to the original angle
-        self.make_move(
-            final_turn_angle - total_angle_turned, 
-            self.get_random_small_movement_length()
-        )
-        tortuous_points.append((self.x, self.y))
-        if self.dead:
-            return
-        
-        self.tortuous_points.append(tortuous_points)
-
-    def get_tortuous_points(self):
-        return self.tortuous_points + sum([child.get_tortuous_points() for child in self.children], [])
+            self.x = base_x + damped_sine(angle, amplitude, t=self.moves) * penpendicular_direction[0]
+            self.y = base_y + damped_sine(angle, amplitude, t=self.moves) * penpendicular_direction[1]
+            
+            self.paint_perpendicular((self.x, self.y), self.width)
+            self.width_decay(0.001)
+        self.check_bounds_and_die()
 
     def get_random_movement_length(self):
         dist = 0
@@ -186,4 +184,54 @@ class Walker:
         return np.random.choice(
             list(range(ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND)) + 
             list(range(-ANGLE_UPPER_BOUND, -ANGLE_LOWER_BOUND))
+        )
+    
+    def paint_line(self, start_point, end_point):
+        start_x, start_y = start_point
+        end_x, end_y = end_point
+
+        end_x = bound(self.grid_size, end_x)
+        end_y = bound(self.grid_size, end_y)
+
+        stride_x = end_x - start_x
+        stride_y = end_y - start_y
+
+        NUM_STEPS = math.ceil(np.sqrt(stride_x ** 2 + stride_y ** 2))
+        step_x = stride_x / NUM_STEPS
+        step_y = stride_y / NUM_STEPS
+
+        for _ in range(NUM_STEPS):
+            start_x += step_x
+            start_y += step_y
+            self.paint_point((start_x, start_y))
+
+    def paint_point(self, point):
+        x, y = point
+        x, y = math.floor(x), math.floor(y)
+        if x >= self.grid_size or \
+            y >= self.grid_size or \
+            x < 0 or \
+            y < 0:
+            return
+        self.grid[x][y] = [255, 255, 255]
+    
+    def paint_perpendicular(self, point, width):
+        x, y = point
+        pendicular_positive_direction = rotate_vector(self.direction, 90)
+        pendicular_negative_direction = rotate_vector(self.direction, -90)
+
+        self.paint_line(
+            (x, y),
+            (
+                x + pendicular_positive_direction[0] * width,
+                y + pendicular_positive_direction[1] * width
+            )
+        )
+
+        self.paint_line(
+            (x, y),
+            (
+                x + pendicular_negative_direction[0] * width,
+                y + pendicular_negative_direction[1] * width
+            )
         )
