@@ -2,7 +2,7 @@ import random
 import math
 import numpy as np
 
-from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MAX_MOVES, MIDDLE_LINE_WEIGHT, MOVEMENT_LENGTH_LIMITER, SINK_STRENGTH, TORTUOUS_MOVEMENT_LENGTH_LIMITER, TORTUOUS_PROBABILITY, VECTOR_FIELD_WEIGHT, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_MAX_MOVES_MULTIPLIER, WALKER_CHILD_PATH_WIDTH_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS, WALKER_INITIAL_PATH_WIDTH, WALKER_PATH_WIDTH_DECAY
+from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MAX_MOVES, MIDDLE_LINE_WEIGHT, MOVEMENT_LENGTH_LIMITER, SINK_STRENGTH, TORTUOUS_MOVEMENT_LENGTH_LIMITER, TORTUOUS_PROBABILITY, TORTUOUS_REPRODUCTION_PROBABILITY_MULTIPLIER, VECTOR_FIELD_WEIGHT, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_MAX_MOVES_MULTIPLIER, WALKER_CHILD_PATH_WIDTH_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS, WALKER_INITIAL_PATH_WIDTH, WALKER_PATH_WIDTH_DECAY
 from util import add_vectors, bound, damped_sine, normalize_vector, rotate_vector
 
 class Walker:
@@ -53,11 +53,15 @@ class Walker:
         self.dead = False
 
         self.tortuous = tortuous
+        self.tortuous_point_sets = []
 
         self.children = []
 
         self.moves = moves
         self.max_moves = max_moves
+    
+    def get_tortuous_points(self):
+        return self.tortuous_point_sets + sum([child.get_tortuous_points() for child in self.children], [])
 
     def get_direction(self, point = None):
         if point is None:
@@ -111,7 +115,8 @@ class Walker:
 
         tortuous_move = self.tortuous and random.random() <= TORTUOUS_PROBABILITY
         if tortuous_move:
-            self.make_tortuous_move()
+            tortuous_points = self.make_tortuous_move()
+            self.tortuous_point_sets.append(set(tortuous_points))
         else:
             self.make_normal_move()
 
@@ -150,7 +155,7 @@ class Walker:
         ################# Remove later
         reproduction_prob = self.reproduction_probability
         if self.tortuous:
-            reproduction_prob *= 0.75
+            reproduction_prob *= TORTUOUS_REPRODUCTION_PROBABILITY_MULTIPLIER
         if random.random() < reproduction_prob:
             self.children.append(
                 Walker(
@@ -208,11 +213,12 @@ class Walker:
         turn_angle = self.get_random_small_angle()
         self.direction = rotate_vector(self.get_direction(), turn_angle)
 
-        amplitude = self.get_random_small_movement_length()
         wavelength = self.get_random_movement_length()
-        self.make_sine_move(amplitude, wavelength)
+        amplitude = wavelength / 2
+        return self.make_sine_move(amplitude, wavelength)
         
     def make_sine_move(self, amplitude, wavelength):
+        points = []
         initial_x, initial_y = self.x, self.y
         total_angle = 360
         step_length = wavelength / total_angle
@@ -225,8 +231,10 @@ class Walker:
             self.y = base_y + damped_sine(angle, amplitude, t=self.moves) * penpendicular_direction[1]
             
             self.paint_perpendicular((self.x, self.y), self.width)
+            points.append((self.x, self.y))
             self.width_decay()
         self.check_bounds_and_die()
+        return points
 
     def get_random_movement_length(self):
         dist = 0

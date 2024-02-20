@@ -5,7 +5,7 @@ import os
 import datetime
 import tqdm
 import shutil
-
+import math 
 from Walker import Walker
 from util import bound, generate_centered_point, rotate_vector
 from config import GRID_SIZE, NUM_WALKERS, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY
@@ -65,6 +65,35 @@ def generate_image(tortuous_image):
         if not alive:
             break
 
+    tortuous_points = []
+    for w in walkers:
+        if w.tortuous:
+            tortuous_points += w.get_tortuous_points()
+
+    # Calculate the bounding box for the tortuous regions
+    bounding_box_coords = []
+    for points_set in tortuous_points:
+        max_x = max([p[0] for p in points_set])
+        max_x = bound(GRID_SIZE, math.floor(max_x + GRID_SIZE * 0.01))
+        min_x = min([p[0] for p in points_set])
+        min_x = bound(GRID_SIZE, math.floor(min_x - GRID_SIZE * 0.01))
+
+        max_y = max([p[1] for p in points_set])
+        max_y = bound(GRID_SIZE, math.floor(max_y + GRID_SIZE * 0.01))
+        min_y = min([p[1] for p in points_set])
+        min_y = bound(GRID_SIZE, math.floor(min_y - GRID_SIZE * 0.01))
+
+        # Mark the tortuous points red
+
+        # for x in range(min_x, max_x + 1):
+        #     img[x][min_y] = [255, 0, 0]
+        #     img[x][max_y] = [255, 0, 0]
+        
+        # for y in range(min_y, max_y + 1):
+        #     img[min_x][y] = [255, 0, 0]
+        #     img[max_x][y] = [255, 0, 0]
+        bounding_box_coords.append([(min_x, min_y), (max_x, max_y)])
+
     # Write the image to a file
     img = np.array(img, dtype=np.uint8)
 
@@ -75,14 +104,14 @@ def generate_image(tortuous_image):
 
     img = Image.fromarray(img)
 
-    return img
+    return img, bounding_box_coords
 
 DEBUG = 0
 if DEBUG:
-    img = generate_image(True)
+    img, _ = generate_image(True)
     img.save("tortuous.png")
 
-    img = generate_image(False)
+    img, _ = generate_image(False)
     img.save("non_tortuous.png")
 else:
     shutil.rmtree("images", ignore_errors=True)
@@ -90,28 +119,36 @@ else:
     os.makedirs("images/non_tortuous", exist_ok=True)
 
     start = datetime.datetime.now()
-    NUM_IMAGES_PER_CLASS = 100
+    NUM_IMAGES_PER_CLASS = 1000
     num_images = 0
     files = {}
 
     print("Generating Tortuous Images")
     for i in tqdm.tqdm(range(NUM_IMAGES_PER_CLASS)):
-        img = generate_image(True)
+        img, bounding_box_coords = generate_image(True)
         filename = f"images/tortuous/{i}.png"
-        files[num_images] = {"filename": filename, "tortuous": 1}
+        files[num_images] = {
+            "filename": filename, 
+            "tortuous": 1,
+            "bounding_box_coords": bounding_box_coords
+        }
         img.save(filename)
         num_images += 1
 
     print("Generating Non-Tortuous Images")
     for i in tqdm.tqdm(range(NUM_IMAGES_PER_CLASS)):
-        img = generate_image(False)
+        img, bounding_box_coords = generate_image(False)
         filename = f"images/non_tortuous/{i}.png"
-        files[num_images] = {"filename": filename, "tortuous": 0}
+        files[num_images] = {
+            "filename": filename,
+            "tortuous": 0,
+            "bounding_box_coords": bounding_box_coords
+        }
         img.save(filename)
         num_images += 1
 
     df = pd.DataFrame.from_dict(files, orient="index")
-    df.to_csv("images/data.csv", index=False)
+    df.to_csv("images/data.csv", index=False, sep="\t")
 
     end = datetime.datetime.now()
     print(f"Time taken = {end-start} to generate {NUM_IMAGES_PER_CLASS * 2} images")
