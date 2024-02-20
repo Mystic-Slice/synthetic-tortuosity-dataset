@@ -4,9 +4,10 @@ import pandas as pd
 import os
 import datetime
 import tqdm
+import shutil
 
 from Walker import Walker
-from util import generate_centered_point, rotate_vector
+from util import bound, generate_centered_point, rotate_vector
 from config import GRID_SIZE, NUM_WALKERS, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY
 
 def generate_image(tortuous_image):
@@ -16,18 +17,45 @@ def generate_image(tortuous_image):
     # Spawn walkers somewhere in the middle of the image
     INITIAL_POINT = generate_centered_point(GRID_SIZE)
 
-    walkers = [
-            Walker(
+    # walkers = [
+    #         Walker(
+    #             img, 
+    #             GRID_SIZE, 
+    #             tortuous_image,
+    #             WALKER_INITIAL_REPRODUCTION_PROBABILITY,
+    #             WALKER_INITIAL_DEATH_PROBABILITY,
+    #             INITIAL_POINT,
+    #             rotate_vector((1, 0), (i * 360) / NUM_WALKERS) # Spread the walkers out evenly
+    #         ) 
+    #         for i in range(NUM_WALKERS)
+    #     ]
+    
+    walkers = []
+    for i in range(NUM_WALKERS):
+        # Slightly move the walker away from the initial point in all directions uniformly
+        initial_x, initial_y = INITIAL_POINT
+        angle = (360 / NUM_WALKERS) * i
+        start_x = bound(
+            GRID_SIZE,
+            initial_x + np.cos(angle) * GRID_SIZE * 0.01
+        )
+        start_y = bound(
+            GRID_SIZE,
+            initial_y + np.sin(angle) * GRID_SIZE * 0.01
+        )
+        start_point = (start_x, start_y)
+
+        walker = Walker(
                 img, 
-                GRID_SIZE, 
+                GRID_SIZE,
                 tortuous_image,
                 WALKER_INITIAL_REPRODUCTION_PROBABILITY,
                 WALKER_INITIAL_DEATH_PROBABILITY,
+                start_point,
                 INITIAL_POINT,
                 rotate_vector((1, 0), (i * 360) / NUM_WALKERS) # Spread the walkers out evenly
-            ) 
-            for i in range(NUM_WALKERS)
-        ]
+            )
+        walkers.append(walker)
 
     while True:
         alive = False
@@ -39,6 +67,12 @@ def generate_image(tortuous_image):
 
     # Write the image to a file
     img = np.array(img, dtype=np.uint8)
+
+    # Crop out the edges
+    start_index = int(GRID_SIZE * 0.2)
+    end_index = int(GRID_SIZE * 0.8)
+    img = img[start_index:end_index, start_index:end_index]
+
     img = Image.fromarray(img)
 
     return img
@@ -51,6 +85,7 @@ if DEBUG:
     img = generate_image(False)
     img.save("non_tortuous.png")
 else:
+    shutil.rmtree("images", ignore_errors=True)
     os.makedirs("images/tortuous", exist_ok=True)
     os.makedirs("images/non_tortuous", exist_ok=True)
 
