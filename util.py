@@ -30,7 +30,7 @@ def distance_2d(p1, p2):
 
 def damped_sine(angle, amplitude, t):
     # amplitude = 20
-    DAMPING_FACTOR = 0.05
+    DAMPING_FACTOR = 0.3
     return amplitude * np.exp(-1 * DAMPING_FACTOR * t) * np.sin(np.radians(angle))
 
 def normalize_vector(vector):

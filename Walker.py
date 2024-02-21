@@ -115,7 +115,13 @@ class Walker:
 
         tortuous_move = self.tortuous and random.random() <= TORTUOUS_PROBABILITY
         if tortuous_move:
-            tortuous_points = self.make_tortuous_move()
+            tortuous_points = sum(
+                [
+                    self.make_tortuous_move(),
+                    self.make_tortuous_move(),
+                ],
+                []
+            )
             self.tortuous_point_sets.append(set(tortuous_points))
         else:
             self.make_normal_move()
