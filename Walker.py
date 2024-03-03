@@ -2,8 +2,8 @@ import random
 import math
 import numpy as np
 
-from config import ANGLE_LOWER_BOUND, ANGLE_UPPER_BOUND, MAX_MOVES, MIDDLE_LINE_WEIGHT, MOVEMENT_LENGTH_LIMITER, SINK_STRENGTH, TORTUOUS_MOVEMENT_LENGTH_LIMITER, TORTUOUS_PROBABILITY, TORTUOUS_REPRODUCTION_PROBABILITY_MULTIPLIER, VECTOR_FIELD_WEIGHT, WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, WALKER_CHILD_MAX_MOVES_MULTIPLIER, WALKER_CHILD_PATH_WIDTH_MULTIPLIER, WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY, WALKER_MATURITY_STEPS, WALKER_INITIAL_PATH_WIDTH, WALKER_PATH_WIDTH_DECAY
-from util import add_vectors, bound, damped_sine, normalize_vector, rotate_vector
+from config import *
+from util import *
 
 class Walker:
     def __init__(
@@ -12,7 +12,6 @@ class Walker:
             grid_size, 
             tortuous, 
             reproduction_probability, 
-            death_probability, 
             initial_point = None, 
             source_point = None,
             initial_direction = None,
@@ -31,7 +30,6 @@ class Walker:
         self.grid_size = grid_size
         self.grid = grid
         self.reproduction_probability = reproduction_probability
-        self.death_probability = death_probability
 
         if initial_direction is not None:
             self.direction = initial_direction
@@ -64,6 +62,13 @@ class Walker:
         return self.tortuous_point_sets + sum([child.get_tortuous_points() for child in self.children], [])
 
     def get_direction(self, point = None):
+        """
+        The direction vector at each point is a weighted sum of three vectors
+        1. The current direction of the walker - to preserve the momentum
+        2. The vector field direction - to guide the walker towards the sink
+        3. The middle line direction - to encourage growth of walkers towards the middle of the image
+        The weights can be adjusted in the config file
+        """
         if point is None:
             point = (self.x, self.y)
         x, y = point
@@ -85,11 +90,6 @@ class Walker:
         ex_, ey_ = E(-1 * SINK_STRENGTH, (sink_x, sink_y), x, y)
 
         vector_field_direction = normalize_vector((ex + ex_, ey + ey_))
-
-        # self.paint_line(
-        #     (source_x, source_y),
-        #     (sink_x, sink_y)
-        # )
 
         mid_x = (source_x + sink_x) / 2
         mid_y = (source_y + sink_y) / 2
@@ -115,7 +115,13 @@ class Walker:
 
         tortuous_move = self.tortuous and random.random() <= TORTUOUS_PROBABILITY
         if tortuous_move:
-            tortuous_points = self.make_tortuous_move()
+            tortuous_points = sum(
+                [
+                    self.make_tortuous_move(),
+                    self.make_tortuous_move(),
+                ],
+                []
+            )
             self.tortuous_point_sets.append(set(tortuous_points))
         else:
             self.make_normal_move()
@@ -131,13 +137,6 @@ class Walker:
             self.dead = True
         return
 
-        # Death probability dependent on age (number of moves)
-        death_prob = self.death_probability * (np.power(2, self.moves) / 500)
-        death_prob = self.death_probability * (self.moves / 3)
-        # death_prob = self.death_probability * (self.moves / 10)
-        if random.random() <= death_prob:
-            self.dead = True
-
     def check_bounds_and_die(self):
         if self.x >= self.grid_size - 1 or \
             self.y >= self.grid_size - 1 or \
@@ -146,30 +145,28 @@ class Walker:
             self.dead = True
     
     def try_reproduce(self):
+        # The walkers should have been alive for a while before they can reproduce
         if self.moves < WALKER_MATURITY_STEPS:
             return
-        ################# Remove later
-        ################# Remove later
-        ################# Remove later
-        ################# Remove later
-        ################# Remove later
+        
         reproduction_prob = self.reproduction_probability
+        # The tortuous walkers should be less likely to reproduce to prevent cluttering
         if self.tortuous:
             reproduction_prob *= TORTUOUS_REPRODUCTION_PROBABILITY_MULTIPLIER
+        
         if random.random() < reproduction_prob:
             self.children.append(
                 Walker(
-                    self.grid, 
-                    self.grid_size, 
-                    self.tortuous,
-                    self.reproduction_probability * WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER,
-                    min(self.death_probability * WALKER_CHILD_DEATH_PROBABILITY_MULTIPLIER, 1.0),
-                    (self.x, self.y),
-                    self.source_point,
-                    rotate_vector(self.direction, self.get_random_large_angle()),
-                    self.width * WALKER_CHILD_PATH_WIDTH_MULTIPLIER,
-                    self.moves,
-                    self.max_moves * WALKER_CHILD_MAX_MOVES_MULTIPLIER
+                    grid = self.grid, 
+                    grid_size = self.grid_size, 
+                    tortuous = self.tortuous,
+                    reproduction_probability = self.reproduction_probability * WALKER_CHILD_REPRODUCTION_PROBABILITY_MULTIPLIER,
+                    initial_point = (self.x, self.y),
+                    source_point = self.source_point,
+                    initial_direction = rotate_vector(self.direction, self.get_random_large_angle()),
+                    width = self.width * WALKER_CHILD_PATH_WIDTH_MULTIPLIER,
+                    moves = self.moves,
+                    max_moves = self.max_moves * WALKER_CHILD_MAX_MOVES_MULTIPLIER
                 )
             )
     

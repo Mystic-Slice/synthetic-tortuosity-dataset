@@ -8,32 +8,20 @@ import shutil
 import math 
 from Walker import Walker
 from util import bound, generate_centered_point, rotate_vector
-from config import GRID_SIZE, NUM_WALKERS, WALKER_INITIAL_DEATH_PROBABILITY, WALKER_INITIAL_REPRODUCTION_PROBABILITY
+from config import GRID_SIZE, NUM_WALKERS, WALKER_INITIAL_REPRODUCTION_PROBABILITY
 
 def generate_image(tortuous_image):
-
     img = [[[0, 0, 0] for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
 
     # Spawn walkers somewhere in the middle of the image
-    INITIAL_POINT = generate_centered_point(GRID_SIZE)
-
-    # walkers = [
-    #         Walker(
-    #             img, 
-    #             GRID_SIZE, 
-    #             tortuous_image,
-    #             WALKER_INITIAL_REPRODUCTION_PROBABILITY,
-    #             WALKER_INITIAL_DEATH_PROBABILITY,
-    #             INITIAL_POINT,
-    #             rotate_vector((1, 0), (i * 360) / NUM_WALKERS) # Spread the walkers out evenly
-    #         ) 
-    #         for i in range(NUM_WALKERS)
-    #     ]
+    SOURCE_POINT = generate_centered_point(GRID_SIZE)
     
+    # Initialize walkers
     walkers = []
     for i in range(NUM_WALKERS):
         # Slightly move the walker away from the initial point in all directions uniformly
-        initial_x, initial_y = INITIAL_POINT
+        # This is because, the vector field force direction is undefined at the source
+        initial_x, initial_y = SOURCE_POINT
         angle = (360 / NUM_WALKERS) * i
         start_x = bound(
             GRID_SIZE,
@@ -46,17 +34,17 @@ def generate_image(tortuous_image):
         start_point = (start_x, start_y)
 
         walker = Walker(
-                img, 
-                GRID_SIZE,
-                tortuous_image,
-                WALKER_INITIAL_REPRODUCTION_PROBABILITY,
-                WALKER_INITIAL_DEATH_PROBABILITY,
-                start_point,
-                INITIAL_POINT,
-                rotate_vector((1, 0), (i * 360) / NUM_WALKERS) # Spread the walkers out evenly
+                grid = img, 
+                grid_size = GRID_SIZE,
+                tortuous = tortuous_image,
+                reproduction_probability = WALKER_INITIAL_REPRODUCTION_PROBABILITY,
+                initial_point = start_point,
+                source_point = SOURCE_POINT,
+                initial_direction = rotate_vector((1, 0), (i * 360) / NUM_WALKERS) # Spread the walkers out evenly
             )
         walkers.append(walker)
 
+    # Let the walkers move until they all die
     while True:
         alive = False
         for walker in walkers:
@@ -65,6 +53,7 @@ def generate_image(tortuous_image):
         if not alive:
             break
 
+    # Get the tortuous points
     tortuous_points = []
     for w in walkers:
         if w.tortuous:
@@ -83,8 +72,7 @@ def generate_image(tortuous_image):
         min_y = min([p[1] for p in points_set])
         min_y = bound(GRID_SIZE, math.floor(min_y - GRID_SIZE * 0.01))
 
-        # Mark the tortuous points red
-
+        # Uncomment to draw the bounding box
         # for x in range(min_x, max_x + 1):
         #     img[x][min_y] = [255, 0, 0]
         #     img[x][max_y] = [255, 0, 0]
