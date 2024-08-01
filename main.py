@@ -98,7 +98,7 @@ def generate_image(tortuous_image):
     end_index = int(GRID_SIZE * 0.8)
     img = img[start_index:end_index, start_index:end_index]
 
-    # Remove the corresponding tortuous points
+    # Remove the corresponding tortuous points and fix the coordinates to adjust for the cropping
     tortuous_points = [
         (x-start_index, y-start_index) for x, y in tortuous_points 
         if start_index <= x < end_index and start_index <= y < end_index
