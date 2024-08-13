@@ -1,5 +1,7 @@
 # Dataset Generator - mimics Tortuousity in Retinal Blood Vessels
 
+This repository is a part of work done for: [Enhancing ROP Image Analysis through Synthetic Data and Attention Mechanisms](https://github.com/Mystic-Slice/Enhancing-ROP-Image-Analysis-through-Synthetic-Data-and-Attention-Mechanisms)
+
 Tortuousity (irregular wavy pattern) in the retinal blood vessels is a sign of retinopathy. This generator can create a dataset of images that mimic the tortuousity in the retinal blood vessels. The dataset can be used to train a model to detect tortuousity in the retinal blood vessels. Even though the generated images don't perfectly match the pattern of retinal blood vessels, the general pattern is captured. Therefore, if a model can detect the tortuousity in the generated images, it is expected to detect the tortuousity in the retinal blood vessels as well.
 
 ## Random Walkers:
